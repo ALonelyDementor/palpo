@@ -101,9 +101,13 @@ impl FromStr for BatchToken {
                 topological_ordering,
             })
         } else {
-            Err(MatrixError::invalid_param(
-                "invalid batch token: must start with 's' or 't'",
-            ))
+            let stream_ordering: Seqnum = input.parse().map_err(|_| {
+                MatrixError::invalid_param("invalid batch token: cannot parse stream ordering")
+            })?;
+
+            Ok(BatchToken::Live {
+                stream_ordering,
+            })
         }
     }
 }
