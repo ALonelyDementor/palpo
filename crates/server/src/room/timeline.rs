@@ -6,7 +6,7 @@ use diesel::prelude::*;
 use serde::Deserialize;
 
 use crate::core::Seqnum;
-use crate::core::events::push_rules::PushRulesEventContent;
+use crate::core::events::push_rules::PushRulesEvent;
 use crate::core::events::room::canonical_alias::RoomCanonicalAliasEventContent;
 use crate::core::events::room::encrypted::Relation;
 use crate::core::events::room::member::MembershipState;
@@ -334,11 +334,11 @@ pub async fn append_pdu(
             continue;
         }
 
-        let rules_for_user = data::user::get_global_data::<PushRulesEventContent>(
+        let rules_for_user = data::user::get_global_data::<PushRulesEvent>(
             user_id,
             &GlobalAccountDataEventType::PushRules.to_string(),
         )?
-        .map(|content: PushRulesEventContent| content.global)
+        .map(|push_rule_event: PushRulesEvent| push_rule_event.content.global)
         .unwrap_or_else(|| Ruleset::server_default(user_id));
 
         let mut highlight = false;
@@ -376,6 +376,7 @@ pub async fn append_pdu(
         {
             error!("failed to upsert event push action: {}", e);
         }
+
         push_action::refresh_notify_summary(&pdu.sender, &pdu.room_id)?;
 
         for push_key in data::user::pusher::get_push_keys(user_id)? {
@@ -422,6 +423,7 @@ pub async fn append_pdu(
                 if content.membership == MembershipState::Join {
                     let _ = crate::user::ping_presence(&pdu.sender, &PresenceState::Online);
                 }
+
                 // Update our membership info, we do this here incase a user is invited
                 // and immediately leaves we need the DB to record the invite event for auth
                 membership::update_membership(
