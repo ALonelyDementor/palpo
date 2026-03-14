@@ -1,4 +1,4 @@
-use palpo_core::events::push_rules::PushRulesEventContent;
+use palpo_core::events::push_rules::PushRulesEvent;
 use salvo::oapi::extract::JsonBody;
 use salvo::prelude::*;
 
@@ -44,11 +44,12 @@ pub fn authed_router() -> Router {
 async fn global(depot: &mut Depot) -> JsonResult<RulesResBody> {
     let authed = depot.authed_info()?;
 
-    let user_data_content = crate::data::user::get_data::<PushRulesEventContent>(
+    let user_data_content = crate::data::user::get_data::<PushRulesEvent>(
         authed.user_id(),
         None,
         &GlobalAccountDataEventType::PushRules.to_string(),
     )
+    .map(|event| event.content)
     .unwrap_or_default();
 
     json_ok(RulesResBody {
@@ -62,11 +63,12 @@ async fn global(depot: &mut Depot) -> JsonResult<RulesResBody> {
 fn get_rule(args: ScopeKindRuleReqArgs, depot: &mut Depot) -> JsonResult<RuleResBody> {
     let authed = depot.authed_info()?;
 
-    let user_data_content = crate::data::user::get_global_data::<PushRulesEventContent>(
+    let user_data_content = crate::data::user::get_global_data::<PushRulesEvent>(
         authed.user_id(),
         &GlobalAccountDataEventType::PushRules.to_string(),
     )?
-    .ok_or(MatrixError::not_found("push rule event not found."))?;
+    .ok_or(MatrixError::not_found("push rule event not found."))?
+    .content;
 
     let rule = user_data_content
         .global
@@ -138,12 +140,12 @@ async fn set_rule(args: SetRuleReqArgs, req: &mut Request, depot: &mut Depot) ->
         );
     }
 
-    let mut user_data_content = crate::data::user::get_data::<PushRulesEventContent>(
+    let mut user_data_content = crate::data::user::get_data::<PushRulesEvent>(
         authed.user_id(),
         None,
         &GlobalAccountDataEventType::PushRules.to_string(),
-    )
-    .unwrap_or_default();
+    )?
+    .content;
 
     if let Err(error) =
         user_data_content
@@ -194,11 +196,12 @@ async fn delete_rule(args: ScopeKindRuleReqArgs, depot: &mut Depot) -> EmptyResu
         );
     }
 
-    let mut user_data_content = crate::data::user::get_global_data::<PushRulesEventContent>(
+    let mut user_data_content = crate::data::user::get_global_data::<PushRulesEvent>(
         authed.user_id(),
         &GlobalAccountDataEventType::PushRules.to_string(),
     )?
-    .ok_or(MatrixError::not_found("PushRules event not found."))?;
+    .ok_or(MatrixError::not_found("PushRules event not found."))?
+    .content;
 
     if let Err(error) = user_data_content
         .global
@@ -230,12 +233,15 @@ async fn delete_rule(args: ScopeKindRuleReqArgs, depot: &mut Depot) -> EmptyResu
 async fn list_rules(depot: &mut Depot) -> JsonResult<RulesResBody> {
     let authed = depot.authed_info()?;
 
-    let user_data_content = crate::data::user::get_data::<PushRulesEventContent>(
+    let user_data_content = crate::data::user::get_data::<PushRulesEvent>(
         authed.user_id(),
         None,
         &GlobalAccountDataEventType::PushRules.to_string(),
     )
+    .map(|event| event.content)
     .unwrap_or_default();
+
+    debug!("User Rules: {user_data_content:?}");
 
     json_ok(RulesResBody {
         global: user_data_content.global,
@@ -257,11 +263,12 @@ async fn get_actions(
         );
     }
 
-    let user_data_content = crate::data::user::get_data::<PushRulesEventContent>(
+    let user_data_content = crate::data::user::get_data::<PushRulesEvent>(
         authed.user_id(),
         None,
         &GlobalAccountDataEventType::PushRules.to_string(),
     )
+    .map(|event| event.content)
     .unwrap_or_default();
 
     let actions = user_data_content
@@ -289,11 +296,12 @@ fn set_actions(
         );
     }
 
-    let mut user_data_content = crate::data::user::get_data::<PushRulesEventContent>(
+    let mut user_data_content = crate::data::user::get_data::<PushRulesEvent>(
         authed.user_id(),
         None,
         &GlobalAccountDataEventType::PushRules.to_string(),
     )
+    .map(|event| event.content)
     .map_err(|_| MatrixError::not_found("push rules event not found"))?;
 
     if user_data_content
@@ -326,11 +334,12 @@ fn get_enabled(args: ScopeKindRuleReqArgs, depot: &mut Depot) -> JsonResult<Rule
         );
     }
 
-    let user_data_content = crate::data::user::get_data::<PushRulesEventContent>(
+    let user_data_content = crate::data::user::get_data::<PushRulesEvent>(
         authed.user_id(),
         None,
         &GlobalAccountDataEventType::PushRules.to_string(),
-    )?;
+    )?
+    .content;
 
     let enabled = user_data_content
         .global
@@ -357,11 +366,12 @@ fn set_enabled(
         );
     }
 
-    let mut user_data_content = crate::data::user::get_data::<PushRulesEventContent>(
+    let mut user_data_content = crate::data::user::get_data::<PushRulesEvent>(
         authed.user_id(),
         None,
         &GlobalAccountDataEventType::PushRules.to_string(),
-    )?;
+    )?
+    .content;
 
     if user_data_content
         .global
