@@ -85,6 +85,16 @@ impl DbUser {
 }
 
 #[derive(Insertable, AsChangeset, Debug, Clone)]
+#[diesel(table_name = user_profiles)]
+pub struct NewDbUserProfile {
+    pub user_id: OwnedUserId,
+    pub room_id: Option<OwnedRoomId>,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+    pub blurhash: Option<String>,
+}
+
+#[derive(Insertable, AsChangeset, Debug, Clone)]
 #[diesel(table_name = user_ignores)]
 pub struct NewDbUserIgnore {
     pub user_id: OwnedUserId,
@@ -217,17 +227,27 @@ pub fn display_name(user_id: &UserId) -> DataResult<Option<String>> {
         .map(Option::flatten)
         .map_err(Into::into)
 }
-pub fn set_display_name(user_id: &UserId, display_name: &str) -> DataResult<()> {
-    diesel::update(
+pub fn set_display_name(_user_id: &UserId, display_name: &str) -> DataResult<()> {
+    let user_profile = NewDbUserProfile {
+        user_id: _user_id.to_owned(),
+        room_id: None,
+        display_name: Some(display_name.to_owned()),
+        avatar_url: None,
+        blurhash: None,
+    };
+
+    diesel::insert_into(
         user_profiles::table
-            .filter(user_profiles::user_id.eq(user_id.as_str()))
-            .filter(user_profiles::room_id.is_null()),
     )
+    .values(user_profile)
+    .on_conflict(user_profiles::user_id)
+    .do_update()
     .set(user_profiles::display_name.eq(display_name))
     .execute(&mut connect()?)
     .map(|_| ())
     .map_err(Into::into)
 }
+
 pub fn remove_display_name(user_id: &UserId) -> DataResult<()> {
     diesel::update(
         user_profiles::table
