@@ -1,4 +1,3 @@
-use std::fs;
 use std::io::Cursor;
 use std::path::Path;
 use std::str::FromStr;
@@ -23,9 +22,10 @@ use crate::data::media::{DbMetadata, DbThumbnail, NewDbMetadata, NewDbThumbnail}
 use crate::data::schema::*;
 use crate::exts::*;
 use crate::media::*;
+use crate::store;
 use crate::{
     AppResult, AuthArgs, EmptyResult, JsonResult, MatrixError, config, empty_ok, hoops, json_ok,
-    utils,
+    utils, store::StoreActions
 };
 
 pub fn self_auth_router() -> Router {
@@ -56,33 +56,12 @@ pub async fn get_content(
     req: &mut Request,
     res: &mut Response,
 ) -> AppResult<()> {
-    if let Some(metadata) = crate::data::media::get_metadata(&args.server_name, &args.media_id)? {
-        let content_type = metadata
-            .content_type
-            .as_deref()
-            .and_then(|c| Mime::from_str(c).ok())
-            .unwrap_or_else(|| {
-                metadata
-                    .file_name
-                    .as_ref()
-                    .map(|name| mime_infer::from_path(name).first_or_octet_stream())
-                    .unwrap_or(mime::APPLICATION_OCTET_STREAM)
-            });
+    let store = store::get();
 
-        let path = get_media_path(&args.server_name, &args.media_id);
-        if Path::new(&path).exists() {
-            if let Some(file_name) = &metadata.file_name {
-                NamedFile::builder(path).attached_name(file_name)
-            } else {
-                NamedFile::builder(path)
-            }
-            .content_type(content_type)
-            .send(req.headers(), res)
-            .await;
-            Ok(())
-        } else {
-            Err(MatrixError::not_yet_uploaded("Media has not been uploaded yet").into())
-        }
+    if let Ok(named_file) = store.get(&args.server_name.to_string(), &args.media_id).await {
+        named_file.send(req.headers(), res).await;
+        // TODO: Clean Temp file
+        Ok(())
     } else if *args.server_name != config::get().server_name && args.allow_remote {
         let mxc = format!("mxc://{}/{}", args.server_name, args.media_id);
         fetch_remote_content(&mxc, &args.server_name, &args.media_id, res).await
@@ -119,26 +98,18 @@ pub async fn get_content_with_filename(
         res.headers_mut().insert(CONTENT_TYPE, content_type);
     }
 
-    let path = get_media_path(&args.server_name, &args.media_id);
-    if Path::new(&path).exists() {
-        let file = NamedFile::builder(path)
-            .content_type(
-                metadata
-                    .content_type
-                    .as_deref()
-                    .and_then(|c| Mime::from_str(c).ok())
-                    .unwrap_or(mime::APPLICATION_OCTET_STREAM),
-            )
-            .attached_name(args.filename)
-            .build()
-            .await?;
-        // if let Some(Ok(content_disposition)) =
-        // metadata.content_disposition.as_deref().map(HeaderValue::from_str) {
-        //     file.set_content_disposition(content_disposition);
-        // }
-        file.send(req.headers(), res).await;
+    let store = store::get();
 
+    if let Ok(named_file_builder) = store.get(&args.server_name.to_string(), &args.media_id).await {
+        let file =
+            named_file_builder
+                .attached_name(args.filename)
+                .build()
+                .await?;
+
+        file.send(req.headers(), res).await;
         Ok(())
+
     } else if *args.server_name != config::get().server_name && args.allow_remote {
         let mxc = format!("mxc://{}/{}", args.server_name, args.media_id);
         fetch_remote_content(&mxc, &args.server_name, &args.media_id, res).await
@@ -173,7 +144,8 @@ pub async fn create_content(
     let file_extension = file_name.as_deref().map(utils::fs::get_file_ext);
 
     let payload = req
-        .payload_with_max_size(config::get().max_upload_size as usize)
+        //.payload()
+        .payload()
         .await
         .unwrap();
     // let checksum = utils::hash::hash_data_sha2_256(payload)?;
@@ -186,23 +158,10 @@ pub async fn create_content(
     };
 
     let conf = crate::config::get();
-    let dest_path = get_media_path(&conf.server_name, &media_id);
 
-    // let dest_path = Path::new(&dest_path);
-    // if dest_path.exists() {
-    //     let metadata = fs::metadata(dest_path)?;
-    //     if metadata.len() != payload.len() as u64 {
-    //         if let Err(e) = fs::remove_file(dest_path) {
-    //             tracing::error!(error = ?e, "remove media file failed");
-    //         }
-    //     }
-    // }
-    if !dest_path.exists() {
-        let parent_dir = utils::fs::get_parent_dir(&dest_path);
-        fs::create_dir_all(&parent_dir)?;
+    let store = store::get();
 
-        let mut file = File::create(dest_path).await?;
-        file.write_all(payload).await?;
+    if let Ok(()) = store.create(&conf.server_name.to_string(), &media_id, payload).await {
 
         let metadata = NewDbMetadata {
             media_id: media_id.clone(),
@@ -242,9 +201,8 @@ pub async fn upload_content(
     let file_name = args.filename.clone();
     let file_extension = file_name.as_deref().map(utils::fs::get_file_ext);
 
-    let conf = crate::config::get();
     let payload = req
-        .payload_with_max_size(conf.max_upload_size as usize)
+        .payload()
         .await
         .unwrap();
 
@@ -252,22 +210,9 @@ pub async fn upload_content(
 
     let conf = crate::config::get();
 
-    let dest_path = get_media_path(&conf.server_name, &args.media_id);
-    let dest_path = Path::new(&dest_path);
-    // if dest_path.exists() {
-    //     let metadata = fs::metadata(dest_path)?;
-    //     if metadata.len() != payload.len() as u64 {
-    //         if let Err(e) = fs::remove_file(dest_path) {
-    //             tracing::error!(error = ?e, "remove media file failed");
-    //         }
-    //     }
-    // }
-    if !dest_path.exists() {
-        let parent_dir = utils::fs::get_parent_dir(dest_path);
-        fs::create_dir_all(&parent_dir)?;
+    let store = store::get();
 
-        let mut file = File::create(dest_path).await?;
-        file.write_all(payload).await?;
+    if let Ok(()) = store.create(&conf.server_name.to_string(), &args.media_id, payload).await {
 
         let metadata = NewDbMetadata {
             media_id: args.media_id.clone(),
@@ -286,8 +231,6 @@ pub async fn upload_content(
         };
 
         crate::data::media::insert_metadata(&metadata)?;
-
-        // TODO: thumbnail support
         empty_ok()
     } else {
         Err(MatrixError::cannot_overwrite_media("Media ID already has content").into())
@@ -299,7 +242,7 @@ pub async fn upload_content(
 #[endpoint]
 pub async fn get_config(_aa: AuthArgs) -> JsonResult<ConfigResBody> {
     json_ok(ConfigResBody {
-        upload_size: config::get().max_upload_size.into(),
+        upload_size: config::get().storage.max_upload_size().into(),
     })
 }
 

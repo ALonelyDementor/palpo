@@ -9,7 +9,7 @@ use serde::de::IgnoredAny;
 use super::{
     AdminConfig, BlurhashConfig, CompressionConfig, DbConfig, FederationConfig, HttpClientConfig,
     JwtConfig, LoggerConfig, MediaConfig, OidcConfig, PresenceConfig, ProxyConfig,
-    ReadReceiptConfig, TurnConfig, TypingConfig, UrlPreviewConfig, WellKnownConfig,
+    ReadReceiptConfig, StoreConfig, TurnConfig, TypingConfig, UrlPreviewConfig, WellKnownConfig, ConfigValidator
 };
 use crate::core::serde::{default_false, default_true};
 use crate::core::{OwnedRoomOrAliasId, OwnedServerName, RoomVersionId};
@@ -97,6 +97,8 @@ pub struct ServerConfig {
     #[serde(default)]
     pub db: DbConfig,
 
+    pub storage: StoreConfig,
+
     // display: hidden
     #[serde(default = "default_true")]
     pub allow_check_for_updates: bool,
@@ -170,12 +172,6 @@ pub struct ServerConfig {
     /// default: 5
     #[serde(default = "default_ip_lookup_strategy")]
     pub ip_lookup_strategy: u8,
-
-    /// Max request size for file uploads in bytes. Defaults to 20MB.
-    ///
-    /// default: 20971520
-    #[serde(default = "default_max_upload_size")]
-    pub max_upload_size: u32,
 
     /// default: 192
     #[serde(default = "default_max_fetch_prev_events")]
@@ -542,9 +538,6 @@ pub struct ServerConfig {
     /// "2001:db8::/32", "ff00::/8", "fec0::/10"]
     #[serde(default = "default_ip_range_denylist")]
     pub ip_range_denylist: Vec<String>,
-
-    #[serde(default = "default_space_path")]
-    pub space_path: String,
 
     // pub auto_acme: Option<AcmeConfig>,
     /// Whether to query the servers listed in trusted_servers first or query
@@ -924,6 +917,12 @@ impl ServerConfig {
             ));
         }
 
+        if let Err(_) = self.storage.check() {
+            return Err(AppError::internal(
+                "Storage configuration is invalid. Please check your storage configuration.",
+            ));
+        }
+
         // // check if we can read the token file path, and check if the file is empty
         // if self.registration_token_file.as_ref().is_some_and(|path| {
         //     let Ok(token) = std::fs::read_to_string(path).inspect_err(|e| {
@@ -938,12 +937,6 @@ impl ServerConfig {
         //         "Registration token file was specified but is empty or failed to be read",
         //     ));
         // }
-
-        if self.max_upload_size < 10_000_000 {
-            tracing::warn!(
-                "max request size is less than 100MB. Please increase it as this is too low for operable federation"
-            );
-        }
 
         // check if user specified valid IP CIDR ranges on startup
         for cidr in &self.ip_range_denylist {
@@ -1115,10 +1108,6 @@ fn default_trusted_server_batch_size() -> usize {
     256
 }
 
-fn default_space_path() -> String {
-    "./space".into()
-}
-
 fn default_startup_netburst_keep() -> i64 {
     50
 }
@@ -1144,10 +1133,6 @@ fn default_cleanup_interval() -> u32 {
 }
 fn default_request_timeout() -> u64 {
     35_000
-}
-
-fn default_max_upload_size() -> u32 {
-    100 * 1024 * 1024 // Default to 20 MB
 }
 
 fn default_max_concurrent_requests() -> u16 {

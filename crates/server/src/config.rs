@@ -9,6 +9,8 @@ use figment::Figment;
 use figment::providers::{Env, Format, Json, Toml, Yaml};
 use ipaddress::IPAddress;
 
+// These imports are too open.
+// We shouldn't import everything, but let's leave it as-is for now.
 mod server;
 pub use server::*;
 mod admin;
@@ -43,6 +45,8 @@ mod proxy;
 pub use proxy::*;
 mod read_receipt;
 pub use read_receipt::*;
+mod store_config;
+pub use store_config::*;
 mod turn;
 pub use turn::*;
 mod typing;
@@ -80,6 +84,10 @@ pub static UNSTABLE_ROOM_VERSIONS: LazyLock<Vec<RoomVersionId>> = LazyLock::new(
         RoomVersionId::V5,
     ]
 });
+
+pub trait ConfigValidator {
+    fn check(&self) -> AppResult<()>;
+}
 
 fn figment_from_path<P: AsRef<Path>>(path: P) -> Figment {
     let ext = path
@@ -134,8 +142,8 @@ pub fn server_user() -> crate::data::user::DbUser {
     crate::data::user::get_user(server_user_id()).expect("server user should exist in the database")
 }
 
-pub fn space_path() -> &'static str {
-    get().space_path.deref()
+pub fn space_path() -> String {
+    get().storage.save_location().clone()
 }
 pub fn server_name() -> &'static ServerName {
     get().server_name.deref()

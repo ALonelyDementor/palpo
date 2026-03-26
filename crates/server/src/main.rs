@@ -34,6 +34,7 @@ pub mod room;
 pub mod sending;
 pub mod server_key;
 pub mod state;
+pub mod store;
 pub mod transaction_id;
 pub mod uiaa;
 pub mod user;
@@ -156,6 +157,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     crate::config::init(config_path);
     let conf = crate::config::get();
     conf.check().expect("config is not valid!");
+
+    crate::store::init_store();
 
     crate::logging::init()?;
     crate::data::init(&conf.db.clone().into_data_db_config());

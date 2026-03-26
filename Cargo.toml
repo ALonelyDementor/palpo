@@ -25,6 +25,11 @@ palpo-data = { version = "0.2.1", path = "crates/data" }
 palpo-identifiers-validation = { version = "0.2.1", path = "crates/identifiers-validation" }
 palpo-server-macros = { version = "0.2.1", path = "crates/server-macros" }
 
+# AWS connection
+aws-config = { version= "1.8.15", features = ["behavior-version-latest"] }
+aws-sdk-s3 = { version = "1.126.0", features = ["behavior-version-latest"]}
+aws-credential-types = { version = "1.2.14", features = [ "hardcoded-credentials" ]}
+
 rust-argon2 = "3.0.0"
 ctor = "0.6.3"
 anyhow = "1.0.100"

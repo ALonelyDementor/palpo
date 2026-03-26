@@ -4,6 +4,7 @@ use salvo::size_limiter;
 
 use crate::AppResult;
 use crate::core::MatrixError;
+use crate::config;
 
 mod auth;
 pub use auth::*;
@@ -35,13 +36,8 @@ pub async fn limit_size(
     res: &mut Response,
     ctrl: &mut FlowCtrl,
 ) {
-    let mut max_size = 1024 * 1024 * 16;
-    if let Some(ctype) = req.content_type()
-        && ctype.type_() == mime::MULTIPART
-    {
-        max_size = 1024 * 1024 * 1024;
-    }
-    let limiter = size_limiter::max_size(max_size);
+    let conf = config::get();
+    let limiter = size_limiter::max_size(conf.storage.max_upload_size());
     limiter.handle(req, depot, res, ctrl).await;
 }
 
