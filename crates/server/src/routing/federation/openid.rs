@@ -9,6 +9,7 @@ pub fn router() -> Router {
 
 #[endpoint]
 async fn user_info(_aa: AuthArgs, args: UserInfoReqArgs) -> JsonResult<UserInfoResBody> {
+    tracing::debug!("Got {} from client", &args.access_token);
     let user_id = crate::user::find_from_openid_token(&args.access_token).await?;
     json_ok(UserInfoResBody::new(user_id))
 }

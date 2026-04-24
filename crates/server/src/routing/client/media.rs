@@ -286,6 +286,8 @@ pub async fn preview_url(
 ///
 /// For width,height <= 96 the server uses another thumbnailing algorithm which crops the image
 /// afterwards.
+
+// TODO: Cleanup this function
 #[endpoint]
 pub async fn get_thumbnail(
     _aa: AuthArgs,
@@ -293,6 +295,7 @@ pub async fn get_thumbnail(
     req: &mut Request,
     res: &mut Response,
 ) -> AppResult<()> {
+    // Forward request outside
     if args.server_name.is_remote() && args.allow_remote {
         let origin = args.server_name.origin().await;
         let mut url = Url::parse(&format!(
@@ -322,7 +325,11 @@ pub async fn get_thumbnail(
         res.body = ResBody::Once(bytes);
         return Ok(());
     }
+    // Finish request outside current homeserver
 
+    let store = store::get();
+
+    // Start Main request (i.e. with width and height properly defined)
     match crate::data::media::get_thumbnail_by_dimension(
         &args.server_name,
         &args.media_id,
@@ -335,10 +342,15 @@ pub async fn get_thumbnail(
             content_type,
             ..
         })) => {
-            let thumbnail_path = get_thumbnail_path(&args.server_name, &args.media_id, id);
+            let media = format!("{}.thumbnails/{}", &args.media_id, id);
+            let named_file =
+                store
+                .get(&args.server_name.as_str(), media.as_str())
+                .await
+                .expect("Could not fetch from store");
 
             res.add_header("Cross-Origin-Resource-Policy", "cross-origin", true)?;
-            let _file = NamedFile::builder(&thumbnail_path)
+            let _file = named_file
                 .content_type(if let Some(content_type) = &content_type {
                     Mime::from_str(content_type)
                         .ok()
@@ -361,10 +373,13 @@ pub async fn get_thumbnail(
         }
         _ => {}
     }
+    // End Main request
 
     let (width, height, crop) =
         crate::media::thumbnail_properties(args.width, args.height).unwrap_or((0, 0, false)); // 0, 0 because that's the original file
 
+
+    // Validate resized image
     if let Some(DbThumbnail {
         id, content_type, ..
     }) = crate::data::media::get_thumbnail_by_dimension(
@@ -373,9 +388,13 @@ pub async fn get_thumbnail(
         width,
         height,
     )? {
-        let thumbnail_path = get_thumbnail_path(&args.server_name, &args.media_id, id);
+        let named_file =
+                store
+                .get(&args.server_name.as_str(), &args.media_id)
+                .await
+                .expect("Could not fetch from store");
         // Using saved thumbnail
-        let file = NamedFile::builder(&thumbnail_path)
+        let file = named_file
             .content_type(if let Some(content_type) = &content_type {
                 Mime::from_str(content_type)
                     .ok()
@@ -396,13 +415,16 @@ pub async fn get_thumbnail(
         disposition_type: _,
         content_type,
         ..
-    })) = crate::data::media::get_metadata(&args.server_name, &args.media_id)
+    })) = crate::data::media::get_metadata(&args.server_name, &args.media_id) // checking if data exists
     {
+        let _ = store.get(server, key);
         // Generate a thumbnail
         let image_path = get_media_path(&args.server_name, &args.media_id);
+
         if let Ok(image) = image::open(&image_path) {
             let original_width = image.width();
             let original_height = image.height();
+
             if width > original_width || height > original_height {
                 let file = NamedFile::builder(&image_path)
                     .content_type(

@@ -41,6 +41,11 @@ pub struct StateEventsForKeyReqArgs {
     /// or the full state event.
     #[salvo(parameter(parameter_in = Query))]
     pub format: Option<StateEventFormat>,
+
+    // Optional parameter for delayed_events
+    #[salvo(parameter(rename = "org.matrix.msc4140.delay",
+                      parameter_in = Query))]
+    pub delayed_event: Option<u32>
 }
 
 /// The format to use for the returned data.
@@ -197,14 +202,17 @@ pub struct SendStateEventReqBody(
 /// Response type for the `send_state_event` endpoint.
 #[derive(ToSchema, Serialize, Debug)]
 
-pub struct SendStateEventResBody {
+pub enum SendStateEventResBody {
     /// A unique identifier for the event.
-    pub event_id: OwnedEventId,
+    #[serde(rename = "event_id")]
+    EventId(OwnedEventId),
+    #[serde(rename = "delay_id")]
+    DelayId(u64)
 }
 impl SendStateEventResBody {
     /// Creates a new `Response` with the given event id.
-    pub fn new(event_id: OwnedEventId) -> Self {
-        Self { event_id }
+    pub fn new_event_id(event_id: OwnedEventId) -> Self {
+        Self::EventId(event_id)
     }
 }
 

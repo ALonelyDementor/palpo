@@ -26,15 +26,21 @@ use crate::{
 
 pub fn router() -> Router {
     Router::with_path("federation")
-        .hoop(check_federation_enabled)
-        .hoop(hoops::auth_by_access_token_or_signatures)
+
         .oapi_tag("federation")
+        .push(Router::with_path("v1")
+                .push(openid::router())
+        )
+        .push(Router::with_path("v2")
+                .push(openid::router())
+        )
         .push(
             Router::with_path("v2")
+                .hoop(check_federation_enabled)
+                .hoop(hoops::auth_by_access_token_or_signatures)
                 .push(backfill::router())
                 .push(event::router())
                 .push(membership::router_v2())
-                .push(openid::router())
                 .push(query::router())
                 .push(room::router())
                 .push(space::router())
@@ -45,10 +51,11 @@ pub fn router() -> Router {
         )
         .push(
             Router::with_path("v1")
+                .hoop(check_federation_enabled)
+                .hoop(hoops::auth_by_access_token_or_signatures)
                 .push(backfill::router())
                 .push(event::router())
                 .push(membership::router_v1())
-                .push(openid::router())
                 .push(query::router())
                 .push(room::router())
                 .push(space::router())

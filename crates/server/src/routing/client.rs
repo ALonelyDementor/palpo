@@ -13,6 +13,7 @@ mod pusher;
 mod register;
 mod room;
 mod room_key;
+mod rtc;
 mod session;
 pub mod sync_msc4186;
 mod sync_v3;
@@ -118,7 +119,9 @@ pub fn router() -> Router {
                 .push(Router::with_path("callback").get(oidc::oidc_callback))
                 .push(Router::with_path("login").post(oidc::oidc_login)),
         )
-        .push(unstable::router())
+        .push(unstable::authed_router())
+        .push(unstable::public_router())
+
 }
 
 /// #POST /_matrix/client/r0/search

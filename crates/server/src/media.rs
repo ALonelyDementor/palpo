@@ -115,7 +115,7 @@ pub fn get_media_path(server_name: &ServerName, media_id: &str) -> PathBuf {
     } else {
         server_name.as_str()
     };
-    let mut r = PathBuf::new();
+    let mut r: PathBuf = PathBuf::new();
     r.push(config::space_path());
     r.push("media");
     r.push(server_name);

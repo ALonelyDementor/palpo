@@ -2,7 +2,7 @@ use salvo::prelude::*;
 
 use crate::hoops;
 
-pub(super) fn router() -> Router {
+pub(super) fn authed_router() -> Router {
     Router::with_path("unstable")
         .hoop(hoops::limit_rate)
         .hoop(hoops::auth_by_access_token)
@@ -17,5 +17,13 @@ pub(super) fn router() -> Router {
         .push(
             Router::with_path("im.nheko.summary/rooms/{room_id_or_alias}/summary")
                 .get(super::room::summary::get_summary_msc_3266),
+        )
+}
+
+pub(super) fn public_router() -> Router {
+    Router::with_path("unstable")
+        .push(
+            Router::with_path("org.matrix.msc4143/rtc/transports")
+                .get(super::rtc::get_transport_msc4143)
         )
 }
